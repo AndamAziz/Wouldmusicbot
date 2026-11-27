@@ -1,8 +1,17 @@
 # Would Music 🎶 (@Wouldmusicbot)
 
-Telegram bot: search a song (name or YouTube link) → get it as **MP3 320 kbps** or **video 1080p / 720p / 480p / 360p**.
-Files go over MTProto (pyrofork), so up to 2 GB. Everyone can use it, with limits (2 downloads at once on the
-server, 1 per user, 20 per user per hour). A file sent once is cached (Telegram file_id) and sent again instantly.
+Telegram bot: **search songs** (YouTube) or **send a link** from YouTube, TikTok, Instagram, Facebook, X, SoundCloud,
+Pinterest, Reddit, Twitch, Dailymotion, Vimeo … (every site yt-dlp knows) → get it as **MP3 320 / 128 kbps** or
+**video best / 1080p / 720p / 480p / 360p** (only the qualities the source really has; vertical TikTok / Reels counted right).
+
+- Menu buttons in the chat (🔎 search · 🔗 link · ⚙️ settings · ❓ help) and bot commands (/song, /dl, /settings).
+- Card with cover, title, uploader, duration; results in pages (⬅️ ➡️).
+- ⚡ Settings: *ask every time* / *MP3 right away* / *video right away* + default MP3 and video quality.
+- Progress bar with speed and time left, ❌ cancel button, queue position.
+- Under every file: one tap for the other format (🎬 / 🎵) and 🔗 the source.
+- ♻️ A file sent once is cached (Telegram file_id) and comes back instantly.
+- Up to 5 links in one message. In groups: `/song name`, `/dl link`.
+- Files over MTProto (pyrofork): up to 2 GB. Limits: 2 jobs at once on the server, 1 per user, 20 per user per hour.
 
 **Secrets are never in git:** `BOT_TOKEN`, `API_ID`, `API_HASH` live only in `/opt/wouldmusic-bot/.env` on the VPS.
 
@@ -32,8 +41,9 @@ cd /opt/wouldmusic-bot && sudo bash deploy/update.sh
 ```
 yt-dlp خۆکارانە ڕۆژانە نوێ دەکرێتەوە (`wouldmusic-bot-update.timer`).
 
-## YouTube: "Sign in to confirm you're not a bot"
-ئەگەر YouTube ڕێگری لە IP ی VPS کرد: cookies ی YouTube (Netscape format، لە ئەکاونتێکی جیاواز) لە
+## Cookies (YouTube "Sign in to confirm you're not a bot", Instagram, Reddit, Vimeo)
+ئەگەر YouTube ڕێگری لە IP ی VPS کرد، یان Instagram / Reddit / Vimeo چوونەژوورەوەیان ویست: cookies (Netscape format،
+لە ئەکاونتێکی جیاواز) لە هەمان فایل دابنێ – cookies ی چەند ماڵپەڕ دەتوانن لە یەک فایلدا بن (یەک لە دوای یەک paste بکە) –
 `/opt/wouldmusic-bot/data/cookies.txt` دابنێ و `sudo chown wouldmusic: /opt/wouldmusic-bot/data/cookies.txt && sudo systemctl restart wouldmusic-bot`.
 
 ## What it touches on the VPS
