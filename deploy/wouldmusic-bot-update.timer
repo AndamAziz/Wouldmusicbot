@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily yt-dlp update for the Would Music bot
+
+[Timer]
+OnCalendar=*-*-* 04:20:00
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

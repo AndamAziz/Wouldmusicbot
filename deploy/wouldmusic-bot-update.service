@@ -1,0 +1,9 @@
+[Unit]
+Description=Update yt-dlp for the Would Music bot (YouTube changes often)
+
+[Service]
+Type=oneshot
+User=wouldmusic
+WorkingDirectory=/opt/wouldmusic-bot
+ExecStart=/opt/wouldmusic-bot/venv/bin/pip install -q -U "yt-dlp[default]"
+ExecStartPost=+/bin/systemctl try-restart wouldmusic-bot.service

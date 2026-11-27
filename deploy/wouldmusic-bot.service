@@ -1,0 +1,29 @@
+[Unit]
+Description=Would Music Telegram bot (@Wouldmusicbot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wouldmusic
+Group=wouldmusic
+WorkingDirectory=/opt/wouldmusic-bot
+Environment=PATH=/opt/wouldmusic-bot/bin:/opt/wouldmusic-bot/venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=XDG_CACHE_HOME=/opt/wouldmusic-bot/data/cache
+Environment=DENO_DIR=/opt/wouldmusic-bot/data/deno
+ExecStart=/opt/wouldmusic-bot/venv/bin/python bot.py
+Restart=always
+RestartSec=10
+# keep the rest of the VPS safe: own user, limited memory / CPU, low priority, no access elsewhere
+MemoryMax=1500M
+CPUQuota=150%
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/wouldmusic-bot/data
+
+[Install]
+WantedBy=multi-user.target
