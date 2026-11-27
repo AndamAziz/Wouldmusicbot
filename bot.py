@@ -150,6 +150,7 @@ class Bot:
         cached = self.store.cached(vid, kind)
         if cached:
             await cq.answer("📤")
+            log.info("sent from cache %s %s (user %s)", vid, kind, user)
             try:
                 if kind == "a320":
                     await self.app.send_audio(chat, cached, caption="🎶 @Wouldmusicbot")
@@ -177,9 +178,14 @@ class Bot:
                 await self.edit(status, f"{KIND_LABEL[kind]}\n🕒 لە ڕیزدایت، کەمێک چاوەڕێ بکە...")
             async with self.sem:
                 self.store.use(user)
+                t0 = time.time()
                 res = await self.download(status, vid, kind, tmp, it.title)
+                size = os.path.getsize(res.path) // 1048576
+                log.info("downloaded %s %s %s MB in %ds (user %s)", vid, kind, size, time.time() - t0, user)
                 await self.edit(status, f"📤 دەنێردرێت: **{res.title}**")
+                t1 = time.time()
                 sent = await self.upload(chat, status, res, kind)
+                log.info("sent %s %s %s MB in %ds: %s", vid, kind, size, time.time() - t1, res.title)
             fid = (sent.audio or sent.video or sent.document).file_id if sent else None
             if fid:
                 self.store.remember(vid, kind, fid)
@@ -233,6 +239,8 @@ class Bot:
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("pyrogram").setLevel(logging.WARNING)
+    # Telegram slows big uploads a little ("Waiting for 1 seconds ... SaveBigFilePart"): normal, not an error
+    logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
     cfg = config.load()
     missing = [k for k, v in (("BOT_TOKEN", cfg.bot_token), ("API_ID", cfg.api_id), ("API_HASH", cfg.api_hash)) if not v]
     if missing:
