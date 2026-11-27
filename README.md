@@ -1,9 +1,12 @@
 # Would Music 🎶 (@Wouldmusicbot)
 
-Telegram bot: **search songs** (YouTube) or **send a link** from YouTube, TikTok, Instagram, Facebook, X, SoundCloud,
+Telegram bot: **search songs** (YouTube) or **send a link** from YouTube, TikTok, Instagram, Facebook, X, Snapchat, SoundCloud,
 Pinterest, Reddit, Twitch, Dailymotion, Vimeo … (every site yt-dlp knows) → get it as **MP3 320 / 128 kbps** or
 **video best / 1080p / 720p / 480p / 360p** (only the qualities the source really has; vertical TikTok / Reels counted right).
 
+- 👻 **Snapchat**: Spotlight videos and share links (`snapchat.com/t/…`) as video or MP3; a public profile
+  (`snapchat.com/add/user`, `snapchat.com/@user`) → its current **Story**, every **Highlight** and its Spotlight,
+  sent as albums (photos + videos, 30 per tap, ⏭ for the next 30). Private accounts / expired stories can't be read.
 - Menu buttons in the chat (🔎 search · 🔗 link · ⚙️ settings · ❓ help) and bot commands (/song, /dl, /settings).
 - Card with cover, title, uploader, duration; results in pages (⬅️ ➡️).
 - ⚡ Settings: *ask every time* / *MP3 right away* / *video right away* + default MP3 and video quality.
