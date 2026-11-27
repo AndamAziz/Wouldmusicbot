@@ -28,7 +28,7 @@ import ytdl
 from store import MODES, Store
 
 log = logging.getLogger("wouldmusic")
-BOT = "@Wouldmusicbot"
+BOT = "@AndamAziz"
 PAGE = 8
 
 BTN_SEARCH, BTN_LINK, BTN_SETTINGS, BTN_HELP = "🔎 گەڕانی گۆرانی", "🔗 داگرتن لە لینک", "⚙️ ڕێکخستن", "❓ یارمەتی"
