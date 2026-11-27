@@ -47,7 +47,7 @@ def video_id(text):
 
 
 def _base_opts(cfg):
-    o = {"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 30,
+    o = {"quiet": True, "no_warnings": True, "no_color": True, "noplaylist": True, "socket_timeout": 30,
          "retries": 3, "fragment_retries": 3, "concurrent_fragment_downloads": 4}
     if cfg.cookies and os.path.exists(cfg.cookies):
         o["cookiefile"] = cfg.cookies
