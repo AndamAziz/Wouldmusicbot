@@ -20,9 +20,10 @@ from collections import OrderedDict
 from pyrogram import Client, filters, idle
 from pyrogram.errors import FloodWait, MessageNotModified
 from pyrogram.types import (BotCommand, CallbackQuery, InlineKeyboardButton as B, InlineKeyboardMarkup as K,
-                            Message, ReplyKeyboardMarkup)
+                            InputMediaPhoto, InputMediaVideo, Message, ReplyKeyboardMarkup)
 
 import config
+import snapchat
 import ytdl
 from store import MODES, Store
 
@@ -40,8 +41,9 @@ MODE_LABEL = {"ask": "❔ هەموو جار بپرسە", "audio": "🎵 ڕاست
 
 HELP = (f"🎶 **Would Music** – {BOT}\n\n"
         "**🔎 گەڕان:** ناوی گۆرانی یان هونەرمەند بنووسە.\n"
-        "**🔗 لینک:** لینک لە YouTube، TikTok، Instagram، Facebook، X، SoundCloud، Pinterest، "
-        "Reddit، Twitch، Dailymotion… بنێرە (تا 5 لینک پێکەوە).\n\n"
+        "**🔗 لینک:** لینک لە YouTube، TikTok، Instagram، Facebook، X، Snapchat، SoundCloud، "
+        "Pinterest، Reddit، Twitch، Dailymotion… بنێرە (تا 5 لینک پێکەوە).\n"
+        "**👻 Snapchat:** Spotlight، لینکی هاوبەشکردن، و پرۆفایلی گشتی (ستۆری + Highlights).\n\n"
         "**🎵 MP3:** 320kbps یان 128kbps (بچووکتر)\n"
         "**🎬 ڤیدیۆ:** باشترین، 1080p، 720p، 480p، 360p – تا 2GB\n\n"
         "**⚡ خێرا:** لە ⚙️ ڕێکخستن «ڕاستەوخۆ MP3» یان «ڕاستەوخۆ ڤیدیۆ» هەڵبژێرە، "
@@ -108,6 +110,14 @@ def after_kb(key, kind, url, vq):
     return K([[other, B("🔗 سەرچاوە", url=url)]])
 
 
+def snap_kb(pkey, page):
+    names = list(page.groups)
+    btns = [B(f"{n.strip()[:28]} ({len(page.groups[n])})", callback_data=f"sg:{pkey}:{i}:0") for i, n in enumerate(names[:40])]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    rows.append([B("🔗 سەرچاوە", url=page.url), B("✖️ داخستن", callback_data="x")])
+    return K(rows)
+
+
 def settings_kb(s):
     tick = lambda ok, t: ("✅ " if ok else "") + t
     return K([[B(tick(s["mode"] == m, MODE_LABEL[m]), callback_data=f"set:mode:{m}")] for m in MODES] +
@@ -152,6 +162,7 @@ class Bot:
         self.waiting = 0
         self.queries = OrderedDict()          # qkey -> (query, items, keys)
         self.meta = OrderedDict()             # link key -> ytdl.Media (so a click needs no second lookup)
+        self.snap_pages = OrderedDict()       # page key -> snapchat.SnapPage (story / highlights lists)
         self.app = Client("wouldmusic", api_id=cfg.api_id, api_hash=cfg.api_hash, bot_token=cfg.bot_token,
                           workdir=cfg.data_dir)
         a = self.app
@@ -263,6 +274,8 @@ class Bot:
     async def open_link(self, m: Message, url):
         user = m.from_user.id if m.from_user else 0
         status = await m.reply_text("🔎 لینکەکە دەپشکنرێت…")
+        if snapchat.is_page(url):
+            return await self.open_snap(m.chat.id, user, url, status)
         try:
             media = await asyncio.to_thread(ytdl.probe, self.cfg, url)
         except Exception as e:
@@ -278,6 +291,40 @@ class Bot:
             await self.safe_delete(status)
             return await self.deliver(m.chat.id, user, key, pick_video_kind(media, s["vq"]))
         await self.show_card(m.chat.id, key, media, status)
+
+    async def open_snap(self, chat, user, url, status):
+        try:
+            page = await asyncio.to_thread(snapchat.load, url)
+        except Exception as e:
+            log.warning("snapchat %s: %s", url, str(e)[:200])
+            return await self.edit(status, "❌ " + ("ئەم Snapchat ـە گشتی نییە یان ستۆرییەکەی بەسەرچووە."
+                                                   if "snapchat:" in str(e) else friendly_error(e)))
+        if page.single:
+            sn = page.single
+            key = self.store.link(sn.url, sn.title or page.title)
+            media = ytdl.Media(page.url, sn.title or page.title or "Snapchat", f"@{page.user}" if page.user else "", 0,
+                               snapchat.SITE, sn.thumb, [], sn.kind == "video")
+            self.remember_meta(key, media)
+            s = self.store.settings(user)
+            if sn.kind == "video" and s["mode"] in ("audio", "video"):
+                await self.safe_delete(status)
+                return await self.deliver(chat, user, key, s["aq"] if s["mode"] == "audio" else "vbest")
+            return await self.show_card(chat, key, media, status)
+        pkey = hashlib.sha1(page.url.encode()).hexdigest()[:10]
+        self.snap_pages[pkey] = page
+        self.snap_pages.move_to_end(pkey)
+        while len(self.snap_pages) > 200:
+            self.snap_pages.popitem(last=False)
+        await self.safe_delete(status)
+        total = sum(len(v) for v in page.groups.values())
+        text = (f"{snapchat.SITE}\n\n👤 **{page.title or page.user}**" + (f" · @{page.user}" if page.user else "") +
+                f"\n📦 {total} سناپ\n\nکام بەش دابەزێنم؟ (هەر جارێک تا {snapchat.MAX_ITEMS} دانە)")
+        if page.picture:
+            try:
+                return await self.app.send_photo(chat, page.picture, caption=text, reply_markup=snap_kb(pkey, page))
+            except Exception:
+                pass
+        await self.app.send_message(chat, text, reply_markup=snap_kb(pkey, page), disable_web_page_preview=True)
 
     async def show_card(self, chat, key, media, replace=None):
         if replace is not None:
@@ -338,6 +385,9 @@ class Bot:
                 if kind not in KIND_LABEL:
                     return await cq.answer()
                 return await self.deliver(cq.message.chat.id, user, key, kind, cq)
+            if data.startswith("sg:"):
+                _, pkey, gi, off = data.split(":")
+                return await self.deliver_snaps(cq.message.chat.id, user, pkey, int(gi), int(off), cq)
             if data.startswith("c:"):
                 job = self.jobs.get(data[2:])
                 if not job or job["user"] != user:
@@ -396,7 +446,9 @@ class Bot:
         tmp = tempfile.mkdtemp(prefix="job-", dir=self.cfg.download_dir)
         try:
             media = self.meta.get(key)
-            if media is None or not media.duration:
+            if media is None and snapchat.is_cdn(url):
+                media = ytdl.Media(url, title or "Snapchat", "", 0, snapchat.SITE)
+            elif media is None:
                 media = await asyncio.to_thread(ytdl.probe, self.cfg, url)
                 self.remember_meta(key, media)
             limit = self.cfg.max_audio_min if kind in ytdl.AUDIO_KINDS else self.cfg.max_video_min
@@ -443,6 +495,90 @@ class Bot:
                 self.active.pop(user, None)
             shutil.rmtree(tmp, ignore_errors=True)
 
+    async def deliver_snaps(self, chat, user, pkey, gi, off, cq):
+        """A Snapchat story / highlight: up to MAX_ITEMS snaps as albums (10 per album), then a 'next' button."""
+        page = self.snap_pages.get(pkey)
+        if not page or gi >= len(page.groups):
+            return await cq.answer("ئەمە کۆن بووە، لینکەکە دووبارە بنێرە.", show_alert=True)
+        name = list(page.groups)[gi]
+        allsnaps = page.groups[name]
+        snaps = allsnaps[off:off + snapchat.MAX_ITEMS]
+        if not snaps:
+            return await cq.answer()
+        if user in self.active:
+            return await cq.answer("⏳ داگرتنێکی ترت لە کاردایە. چاوەڕێ بکە یان ❌ هەڵیوەشێنەرەوە.", show_alert=True)
+        if self.cfg.per_user_hour and self.store.used_last_hour(user) >= self.cfg.per_user_hour:
+            return await cq.answer(f"سنووری {self.cfg.per_user_hour} داگرتن لە کاتژمێرێکدا تەواو بوو.", show_alert=True)
+        await cq.answer()
+        job_id = secrets.token_hex(4)
+        job = {"cancel": threading.Event(), "user": user, "uploading": False}
+        self.jobs[job_id], self.active[user] = job, job_id
+        cancel_kb = K([[B("❌ هەڵوەشاندنەوە", callback_data=f"c:{job_id}")]])
+        head = f"{snapchat.SITE} · {name.strip()}"
+        status = await self.app.send_message(chat, f"{head}\n⏳ ئامادەکردن…", reply_markup=cancel_kb)
+        tmp = tempfile.mkdtemp(prefix="snap-", dir=self.cfg.download_dir)
+        try:
+            await self.sem.acquire()
+            try:
+                self.store.use(user)
+                files = []
+                for i, sn in enumerate(snaps):
+                    if job["cancel"].is_set():
+                        raise ytdl.Cancelled()
+                    await self.edit(status, f"{head}\n⬇️ {i + 1}/{len(snaps)}\n{bar(i * 100 / len(snaps))}", cancel_kb)
+                    try:
+                        p = await asyncio.to_thread(snapchat.download_file, sn.url, os.path.join(tmp, f"{i:03d}"),
+                                                    None, job["cancel"], self.cfg.max_bytes)
+                        files.append(p)
+                    except ytdl.Cancelled:
+                        raise
+                    except Exception as e:
+                        log.warning("snap %s: %s", sn.url[:80], e)
+                caption = (f"{head}" + (f" · @{page.user}" if page.user else "") +
+                           f"\n📦 {off + 1}–{off + len(snaps)} / {len(allsnaps)}\n🤖 {BOT}")
+                for c in range(0, len(files), 10):
+                    if job["cancel"].is_set():
+                        raise ytdl.Cancelled()
+                    await self.edit(status, f"{head}\n📤 {min(c + 10, len(files))}/{len(files)}", cancel_kb)
+                    chunk = files[c:c + 10]
+                    cap = caption if c == 0 else ""
+                    if len(chunk) == 1:
+                        f = chunk[0]
+                        if f.endswith(("mp4", "mov")):
+                            d, w, h = await asyncio.to_thread(snapchat.video_info, self.cfg, f)
+                            await self.app.send_video(chat, f, caption=cap, duration=d, width=w, height=h,
+                                                      supports_streaming=True)
+                        else:
+                            await self.app.send_photo(chat, f, caption=cap)
+                        continue
+                    group = []
+                    for j, f in enumerate(chunk):
+                        c_ = cap if j == 0 else ""
+                        if f.endswith(("mp4", "mov")):
+                            d, w, h = await asyncio.to_thread(snapchat.video_info, self.cfg, f)
+                            group.append(InputMediaVideo(f, caption=c_, width=w, height=h, duration=d, supports_streaming=True))
+                        else:
+                            group.append(InputMediaPhoto(f, caption=c_))
+                    await self.app.send_media_group(chat, group)
+                log.info("sent snapchat %s %s %d/%d (user %s)", page.user, name.strip(), len(files), len(snaps), user)
+            finally:
+                self.sem.release()
+            await self.safe_delete(status)
+            rest = len(allsnaps) - (off + len(snaps))
+            if rest > 0:
+                await self.app.send_message(chat, f"{head}\n{rest} سناپی تر ماوە.", reply_markup=K([[
+                    B(f"⏭ {min(rest, snapchat.MAX_ITEMS)} ی دواتر", callback_data=f"sg:{pkey}:{gi}:{off + len(snaps)}")]]))
+        except ytdl.Cancelled:
+            await self.edit(status, f"{head}\n❌ هەڵوەشێنرایەوە.")
+        except Exception as e:
+            log.warning("snapchat group %s: %s", name, str(e)[:300])
+            await self.edit(status, f"{head}\n❌ " + friendly_error(e))
+        finally:
+            self.jobs.pop(job_id, None)
+            if self.active.get(user) == job_id:
+                self.active.pop(user, None)
+            shutil.rmtree(tmp, ignore_errors=True)
+
     async def download(self, status, url, kind, tmp, title, job, cancel_kb):
         loop = asyncio.get_running_loop()
         last = [0.0]
@@ -460,6 +596,8 @@ class Bot:
                 self.edit(status, f"{KIND_LABEL[kind]}\n⬇️ **{title[:80]}**\n{line}\n{extra}", cancel_kb), loop)
 
         await self.edit(status, f"{KIND_LABEL[kind]}\n⬇️ **{title[:80]}**\n{bar(0)}", cancel_kb)
+        if snapchat.is_cdn(url):
+            return await asyncio.to_thread(snapchat.fetch_result, self.cfg, url, kind, tmp, hook, job["cancel"], title)
         return await asyncio.to_thread(ytdl.download, self.cfg, url, kind, tmp, hook, job["cancel"])
 
     async def upload(self, chat, status, res, kind, media, size, key, url, vq, cancel_kb, job):
